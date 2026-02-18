@@ -6,6 +6,16 @@ const integrationRoute = new Hono();
 
 type Provider = 'gmail' | 'outlook';
 
+type EmailListItem = {
+  id: string;
+  subject: string;
+  from: string | null;
+  preview: string | null;
+  receivedAt: string | null;
+  isRead: boolean | null;
+  webLink: string | null;
+};
+
 const getProvider = (name: string): Provider | null => {
   if (name === 'gmail' || name === 'outlook') {
     return name;
@@ -144,6 +154,52 @@ integrationRoute.get('/:provider/callback', async (c) => {
   return c.html('<h1>連携が完了しました。タブを閉じてアプリに戻ってください。</h1>');
 });
 
+integrationRoute.get('/:provider/messages', async (c) => {
+  const provider = getProvider(c.req.param('provider'));
+
+  if (!provider) {
+    return c.json({ message: '対応していないプロバイダーです。' }, 400);
+  }
+
+  const userId = c.req.query('userId');
+  const limitRaw = c.req.query('limit');
+
+  if (!userId) {
+    return c.json({ message: 'userId が必要です。' }, 400);
+  }
+
+  const limitNumber = Number(limitRaw ?? '10');
+  const limit = Number.isFinite(limitNumber) ? Math.min(Math.max(Math.floor(limitNumber), 1), 50) : 10;
+
+  const connectedAccount = await prisma.connectedAccount.findUnique({
+    where: {
+      userId_provider: {
+        userId,
+        provider: provider === 'gmail' ? 'GMAIL' : 'OUTLOOK'
+      }
+    }
+  });
+
+  if (!connectedAccount) {
+    return c.json({ message: '連携済みアカウントが見つかりません。' }, 404);
+  }
+
+  if (connectedAccount.expiresAt && connectedAccount.expiresAt.getTime() <= Date.now()) {
+    return c.json({ message: 'アクセストークンの有効期限が切れています。再連携してください。' }, 401);
+  }
+
+  const fetchResult =
+    provider === 'gmail'
+      ? await fetchGoogleMessages(connectedAccount.accessToken, limit)
+      : await fetchMicrosoftMessages(connectedAccount.accessToken, limit);
+
+  if (!fetchResult.ok) {
+    return c.json({ message: 'メール一覧の取得に失敗しました。', detail: fetchResult.detail }, 502);
+  }
+
+  return c.json({ provider, emails: fetchResult.emails });
+});
+
 const fetchGoogleToken = (code: string, redirectUri: string) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -216,6 +272,105 @@ const fetchMicrosoftEmail = async (accessToken: string) => {
   const body = (await response.json()) as { mail?: string; userPrincipalName?: string };
 
   return body.mail ?? body.userPrincipalName ?? null;
+};
+
+const fetchGoogleMessages = async (
+  accessToken: string,
+  limit: number
+): Promise<{ ok: true; emails: EmailListItem[] } | { ok: false; detail: string }> => {
+  const listResponse = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${limit}`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+
+  if (!listResponse.ok) {
+    return { ok: false, detail: await listResponse.text() };
+  }
+
+  const listBody = (await listResponse.json()) as {
+    messages?: Array<{ id: string }>;
+  };
+
+  const messageIds = listBody.messages ?? [];
+  const detailResponses = await Promise.all(
+    messageIds.map(async (message) => {
+      const response = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        }
+      );
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const body = (await response.json()) as {
+        id: string;
+        snippet?: string;
+        internalDate?: string;
+        labelIds?: string[];
+        payload?: { headers?: Array<{ name?: string; value?: string }> };
+      };
+
+      const headers = body.payload?.headers ?? [];
+      const subject = headers.find((header) => header.name?.toLowerCase() === 'subject')?.value ?? '(no subject)';
+      const from = headers.find((header) => header.name?.toLowerCase() === 'from')?.value ?? null;
+      const receivedAt = body.internalDate ? new Date(Number(body.internalDate)).toISOString() : null;
+      const isRead = body.labelIds ? !body.labelIds.includes('UNREAD') : null;
+
+      return {
+        id: body.id,
+        subject,
+        from,
+        preview: body.snippet ?? null,
+        receivedAt,
+        isRead,
+        webLink: `https://mail.google.com/mail/u/0/#inbox/${body.id}`
+      } as EmailListItem;
+    })
+  );
+
+  return { ok: true, emails: detailResponses.filter((email): email is EmailListItem => email !== null) };
+};
+
+const fetchMicrosoftMessages = async (
+  accessToken: string,
+  limit: number
+): Promise<{ ok: true; emails: EmailListItem[] } | { ok: false; detail: string }> => {
+  const response = await fetch(
+    `https://graph.microsoft.com/v1.0/me/messages?$top=${limit}&$select=id,subject,from,receivedDateTime,bodyPreview,isRead,webLink`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    }
+  );
+
+  if (!response.ok) {
+    return { ok: false, detail: await response.text() };
+  }
+
+  const body = (await response.json()) as {
+    value?: Array<{
+      id: string;
+      subject?: string;
+      bodyPreview?: string;
+      receivedDateTime?: string;
+      isRead?: boolean;
+      webLink?: string;
+      from?: { emailAddress?: { address?: string } };
+    }>;
+  };
+
+  const emails: EmailListItem[] = (body.value ?? []).map((message) => ({
+    id: message.id,
+    subject: message.subject ?? '(no subject)',
+    from: message.from?.emailAddress?.address ?? null,
+    preview: message.bodyPreview ?? null,
+    receivedAt: message.receivedDateTime ?? null,
+    isRead: message.isRead ?? null,
+    webLink: message.webLink ?? null
+  }));
+
+  return { ok: true, emails };
 };
 
 export { integrationRoute };
