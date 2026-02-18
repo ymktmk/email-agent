@@ -6,6 +6,7 @@ React + TanStack Router/Query + Tailwind CSS のフロントエンド、Hono + P
 
 - Firebase Authentication を使った Google / Microsoft ログイン
 - Gmail / Outlook OAuth 連携開始 API とコールバック
+- Gmail / Outlook のメール一覧取得 API
 - 連携済みメールアカウント情報の保存（Prisma）
 
 ## 構成
@@ -55,6 +56,18 @@ VITE_FIREBASE_AUTH_DOMAIN=""
 VITE_FIREBASE_PROJECT_ID=""
 VITE_FIREBASE_APP_ID=""
 ```
+
+
+## メール一覧取得 API
+
+連携済みアカウントに対して、プロバイダー別にメール一覧を取得できます。
+
+- Gmail: `GET /api/integrations/gmail/messages?userId=<USER_ID>&limit=10`
+- Outlook: `GET /api/integrations/outlook/messages?userId=<USER_ID>&limit=10`
+
+レスポンスは `emails` 配列で、`subject` / `from` / `preview` / `receivedAt` / `isRead` / `webLink` を返します。
+
+`limit` は 1〜50 の範囲で指定でき、未指定時は 10 件です。
 
 ## OAuth のコールバック URL
 
