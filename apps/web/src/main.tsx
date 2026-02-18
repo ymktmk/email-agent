@@ -5,6 +5,7 @@ import { RouterProvider, createRootRoute, createRoute, createRouter, Outlet } fr
 import { HomePage } from './routes/home';
 import { LoginPage } from './routes/login';
 import { SignupPage } from './routes/signup';
+import { DebugPage } from './routes/debug';
 import './index.css';
 
 const rootRoute = createRootRoute({
@@ -33,7 +34,13 @@ const signupRoute = createRoute({
   component: SignupPage
 });
 
-const routeTree = rootRoute.addChildren([homeRoute, loginRoute, signupRoute]);
+const debugRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/debug',
+  component: DebugPage
+});
+
+const routeTree = rootRoute.addChildren([homeRoute, loginRoute, signupRoute, debugRoute]);
 
 const router = createRouter({ routeTree });
 
