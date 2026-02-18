@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router';
 import { HomePage } from './routes/home';
+import { LoginPage } from './routes/login';
+import { SignupPage } from './routes/signup';
 import './index.css';
 
 const rootRoute = createRootRoute({
@@ -19,7 +21,19 @@ const homeRoute = createRoute({
   component: HomePage
 });
 
-const routeTree = rootRoute.addChildren([homeRoute]);
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/login',
+  component: LoginPage
+});
+
+const signupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/signup',
+  component: SignupPage
+});
+
+const routeTree = rootRoute.addChildren([homeRoute, loginRoute, signupRoute]);
 
 const router = createRouter({ routeTree });
 
