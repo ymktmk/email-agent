@@ -4,12 +4,17 @@ import { prisma } from '../prisma/client';
 
 export class PrismaUserRepository implements UserRepository {
   async findAll(): Promise<User[]> {
-    const users = await prisma.user.findMany({ orderBy: { createdAt: 'desc' } });
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
 
-    return users.map((user) => ({
-      ...user,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt
-    }));
+    return users;
   }
 }

@@ -2,6 +2,8 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { usersRoute } from './presentation/routes/users';
+import { authRoute } from './presentation/routes/auth';
+import { integrationRoute } from './presentation/routes/integrations';
 
 const app = new Hono();
 
@@ -12,6 +14,8 @@ app.get('/api/health', (c) => {
 });
 
 app.route('/api/users', usersRoute);
+app.route('/api/auth', authRoute);
+app.route('/api/integrations', integrationRoute);
 
 const port = 8787;
 
