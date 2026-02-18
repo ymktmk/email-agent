@@ -16,6 +16,14 @@ type EmailListItem = {
   webLink: string | null;
 };
 
+type SendEmailRequest = {
+  userId?: string;
+  to?: string;
+  subject?: string;
+  bodyText?: string;
+  bodyHtml?: string;
+};
+
 const getProvider = (name: string): Provider | null => {
   if (name === 'gmail' || name === 'outlook') {
     return name;
@@ -57,7 +65,10 @@ integrationRoute.post('/:provider/connect', async (c) => {
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('redirect_uri', callbackUrl);
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', 'openid email profile https://www.googleapis.com/auth/gmail.readonly');
+    url.searchParams.set(
+      'scope',
+      'openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send'
+    );
     url.searchParams.set('access_type', 'offline');
     url.searchParams.set('prompt', 'consent');
     url.searchParams.set('state', state);
@@ -76,7 +87,7 @@ integrationRoute.post('/:provider/connect', async (c) => {
   url.searchParams.set('redirect_uri', callbackUrl);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('response_mode', 'query');
-  url.searchParams.set('scope', 'offline_access openid profile email Mail.Read');
+  url.searchParams.set('scope', 'offline_access openid profile email Mail.Read Mail.Send');
   url.searchParams.set('state', state);
 
   return c.json({ authUrl: url.toString() });
@@ -198,6 +209,60 @@ integrationRoute.get('/:provider/messages', async (c) => {
   }
 
   return c.json({ provider, emails: fetchResult.emails });
+});
+
+integrationRoute.post('/:provider/send', async (c) => {
+  const provider = getProvider(c.req.param('provider'));
+
+  if (!provider) {
+    return c.json({ message: '対応していないプロバイダーです。' }, 400);
+  }
+
+  const body = await c.req.json<SendEmailRequest>();
+
+  if (!body.userId || !body.to || !body.subject || (!body.bodyText && !body.bodyHtml)) {
+    return c.json({ message: 'userId / to / subject / bodyText または bodyHtml が必要です。' }, 400);
+  }
+
+  const connectedAccount = await prisma.connectedAccount.findUnique({
+    where: {
+      userId_provider: {
+        userId: body.userId,
+        provider: provider === 'gmail' ? 'GMAIL' : 'OUTLOOK'
+      }
+    }
+  });
+
+  if (!connectedAccount) {
+    return c.json({ message: '連携済みアカウントが見つかりません。' }, 404);
+  }
+
+  if (connectedAccount.expiresAt && connectedAccount.expiresAt.getTime() <= Date.now()) {
+    return c.json({ message: 'アクセストークンの有効期限が切れています。再連携してください。' }, 401);
+  }
+
+  const sendResult =
+    provider === 'gmail'
+      ? await sendGoogleMessage({
+          accessToken: connectedAccount.accessToken,
+          to: body.to,
+          subject: body.subject,
+          bodyText: body.bodyText,
+          bodyHtml: body.bodyHtml
+        })
+      : await sendMicrosoftMessage({
+          accessToken: connectedAccount.accessToken,
+          to: body.to,
+          subject: body.subject,
+          bodyText: body.bodyText,
+          bodyHtml: body.bodyHtml
+        });
+
+  if (!sendResult.ok) {
+    return c.json({ message: 'メール送信に失敗しました。', detail: sendResult.detail }, 502);
+  }
+
+  return c.json({ provider, messageId: sendResult.messageId, status: 'sent' });
 });
 
 const fetchGoogleToken = (code: string, redirectUri: string) => {
@@ -371,6 +436,95 @@ const fetchMicrosoftMessages = async (
   }));
 
   return { ok: true, emails };
+};
+
+const encodeBase64Url = (value: string) => Buffer.from(value).toString('base64url');
+
+const sendGoogleMessage = async ({
+  accessToken,
+  to,
+  subject,
+  bodyText,
+  bodyHtml
+}: {
+  accessToken: string;
+  to: string;
+  subject: string;
+  bodyText?: string;
+  bodyHtml?: string;
+}): Promise<{ ok: true; messageId: string | null } | { ok: false; detail: string }> => {
+  const mimeParts = [
+    `To: ${to}`,
+    `Content-Type: ${bodyHtml ? 'text/html' : 'text/plain'}; charset="UTF-8"`,
+    'MIME-Version: 1.0',
+    `Subject: ${subject}`,
+    '',
+    bodyText ?? bodyHtml ?? ''
+  ];
+
+  const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      raw: encodeBase64Url(mimeParts.join('\r\n'))
+    })
+  });
+
+  if (!response.ok) {
+    return { ok: false, detail: await response.text() };
+  }
+
+  const responseBody = (await response.json()) as { id?: string };
+
+  return { ok: true, messageId: responseBody.id ?? null };
+};
+
+const sendMicrosoftMessage = async ({
+  accessToken,
+  to,
+  subject,
+  bodyText,
+  bodyHtml
+}: {
+  accessToken: string;
+  to: string;
+  subject: string;
+  bodyText?: string;
+  bodyHtml?: string;
+}): Promise<{ ok: true; messageId: string | null } | { ok: false; detail: string }> => {
+  const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      message: {
+        subject,
+        body: {
+          contentType: bodyHtml ? 'HTML' : 'Text',
+          content: bodyHtml ?? bodyText ?? ''
+        },
+        toRecipients: [
+          {
+            emailAddress: {
+              address: to
+            }
+          }
+        ]
+      },
+      saveToSentItems: true
+    })
+  });
+
+  if (!response.ok) {
+    return { ok: false, detail: await response.text() };
+  }
+
+  return { ok: true, messageId: null };
 };
 
 export { integrationRoute };

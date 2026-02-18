@@ -96,6 +96,28 @@ VITE_FIREBASE_APP_ID=""
 
 `limit` は 1〜50 の範囲で指定でき、未指定時は 10 件です。
 
+## メール送信 API
+
+連携済みアカウントからプロバイダー別にメール送信できます。
+
+- Gmail: `POST /api/integrations/gmail/send`
+- Outlook: `POST /api/integrations/outlook/send`
+
+リクエスト例:
+
+```json
+{
+  "userId": "USER_ID",
+  "to": "recipient@example.com",
+  "subject": "ご連絡ありがとうございます",
+  "bodyText": "本文テキスト"
+}
+```
+
+`bodyText` か `bodyHtml` のどちらかは必須です。成功時は `status: "sent"` とプロバイダーごとの `messageId`（Outlook は `null`）を返します。
+
+> 既存連携で送信 API を利用するには、Gmail の `gmail.send` / Outlook の `Mail.Send` 権限を含めるために再連携が必要です。
+
 ## OAuth のコールバック URL
 
 - Gmail: `http://localhost:8787/api/integrations/gmail/callback`
