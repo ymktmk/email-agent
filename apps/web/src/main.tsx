@@ -7,11 +7,7 @@ import './index.css';
 
 const rootRoute = createRootRoute({
   component: () => (
-    <div className="mx-auto max-w-4xl p-8">
-      <header className="mb-8 rounded-xl border border-slate-800 bg-slate-900/60 p-6">
-        <h1 className="text-2xl font-semibold">Email Agent Platform</h1>
-        <p className="mt-2 text-slate-300">React + TanStack Router/Query + Tailwind CSS</p>
-      </header>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#eff6ff,_#dbeafe_45%,_#bfdbfe)] py-6 lg:py-12">
       <Outlet />
     </div>
   )
