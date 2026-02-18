@@ -7,6 +7,33 @@ React + TanStack Router/Query + Tailwind CSS のフロントエンド、Hono + P
 - Firebase Authentication を使った Google / Microsoft ログイン
 - Gmail / Outlook OAuth 連携開始 API とコールバック
 - 連携済みメールアカウント情報の保存（Prisma）
+- 受信メールに対する返答文の下書き生成 API
+
+
+## 返答メッセージ生成 API
+
+`POST /api/messages/reply`
+
+リクエスト例:
+
+```json
+{
+  "senderName": "山田 太郎",
+  "receivedMessage": "来週の定例会議の日程について相談させてください。",
+  "purpose": "会議日程の調整",
+  "tone": "business",
+  "includeSignature": true,
+  "signerName": "鈴木 花子"
+}
+```
+
+レスポンス例:
+
+```json
+{
+  "replyMessage": "山田 太郎様\nお世話になっております。\n\nこの度はご連絡をいただき、誠にありがとうございます。 ..."
+}
+```
 
 ## 構成
 
