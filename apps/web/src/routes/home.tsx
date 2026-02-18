@@ -7,7 +7,7 @@ export const HomePage = () => {
         <h1 className="text-2xl font-bold text-slate-800">email-agent</h1>
         <p className="mt-2 text-sm text-slate-600">メール連携を開始するにはログインしてください。初めての方は新規登録から進められます。</p>
 
-        <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        <div className="mt-5 grid gap-2 sm:grid-cols-3">
           <Link
             to="/login"
             className="rounded-md border border-slate-200 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -19,6 +19,13 @@ export const HomePage = () => {
             className="rounded-md border border-slate-200 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
             新規登録画面へ
+          </Link>
+
+          <Link
+            to="/debug"
+            className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-center text-sm font-semibold text-sky-800 hover:bg-sky-100"
+          >
+            /debug モックUIへ
           </Link>
         </div>
       </section>

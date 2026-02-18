@@ -1,5 +1,5 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup } from 'firebase/auth';
+const firebaseAppModule = 'firebase/app';
+const firebaseAuthModule = 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -8,20 +8,33 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+const loadFirebaseSdk = async () => {
+  try {
+    const appSdk = await import(/* @vite-ignore */ firebaseAppModule);
+    const authSdk = await import(/* @vite-ignore */ firebaseAuthModule);
+
+    const app = appSdk.initializeApp(firebaseConfig);
+    const auth = authSdk.getAuth(app);
+
+    return { auth, authSdk };
+  } catch {
+    throw new Error('Firebase SDK が見つかりません。`firebase` パッケージをインストールしてください。');
+  }
+};
 
 export const loginWithGoogle = async () => {
-  const provider = new GoogleAuthProvider();
-  const credential = await signInWithPopup(auth, provider);
+  const { auth, authSdk } = await loadFirebaseSdk();
+  const provider = new authSdk.GoogleAuthProvider();
+  const credential = await authSdk.signInWithPopup(auth, provider);
 
   return credential.user.getIdToken();
 };
 
 export const loginWithMicrosoft = async () => {
-  const provider = new OAuthProvider('microsoft.com');
+  const { auth, authSdk } = await loadFirebaseSdk();
+  const provider = new authSdk.OAuthProvider('microsoft.com');
   provider.setCustomParameters({ prompt: 'select_account' });
-  const credential = await signInWithPopup(auth, provider);
+  const credential = await authSdk.signInWithPopup(auth, provider);
 
   return credential.user.getIdToken();
 };
